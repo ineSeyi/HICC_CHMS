@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>Church Check-In — Scan Station</title>
+<script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+<style>
+  /* ============================================================
+     BEFORE PUBLISHING: paste your Apps Script Web App URL below.
+     See "API_BASE" a few lines down in the <script> block.
+     ============================================================ */
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; font-family: Arial, sans-serif; background: #0b1d3a; color: #fff;
+    min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center;
+    text-align: center; padding: 16px;
+  }
+  #header { padding: 8px 16px 16px; }
+  #header h1 { margin: 0; font-size: 22px; }
+  #header p { margin: 4px 0 0; font-size: 13px; color: #b9c6e0; }
+  #reader { width: min(92vw, 480px); border-radius: 16px; overflow: hidden; box-shadow: 0 0 0 4px #14294f; display: none; }
+  #status {
+    margin-top: 18px; min-height: 90px; width: min(92vw, 480px);
+    display: none; flex-direction: column; align-items: center; justify-content: center;
+    border-radius: 12px; padding: 14px; transition: background 0.2s;
+  }
+  #status.idle { background: #14294f; }
+  #status.ok { background: #1e7a3c; }
+  #status.warn { background: #8a6d1a; }
+  #status.error { background: #8a1f1f; }
+  #status .name { font-size: 24px; font-weight: bold; }
+  #status .msg { font-size: 14px; margin-top: 4px; word-break: break-word; }
+  #startBtn {
+    font-size: 20px; padding: 18px 36px; border-radius: 14px; border: none;
+    background: #2f6fed; color: #fff; cursor: pointer; margin-top: 24px;
+  }
+  #startBtn:active { background: #24509c; }
+  #startBtn:disabled { background: #5b6d99; }
+  #diag {
+    max-width: min(92vw, 480px); font-size: 12px; color: #b9c6e0; margin-top: 14px;
+    text-align: left; white-space: pre-wrap; display: none;
+  }
+  #diag.show { display: block; }
+  #footer { margin-top: 20px; font-size: 11px; color: #6f82ab; }
+  #configWarning {
+    background: #8a1f1f; padding: 10px 16px; border-radius: 10px; margin-bottom: 16px;
+    font-size: 13px; max-width: min(92vw, 480px); display: none;
+  }
+  #configWarning.show { display: block; }
+</style>
+</head>
+<body>
+  <div id="configWarning">
+    API_BASE is not configured yet. Open this file, find the line
+    <code>const API_BASE = "https://script.google.com/macros/s/AKfycbziV28jQO2ig5FH4XbVS3UGghtTfVrgdumhKN1jVan_aeiQSuPH9CslfHHvnzf-EJur0A/exec";</code>
+    near the top of the &lt;script&gt; block, and paste in your deployed Apps Script Web App URL
+    (Deploy → Manage deployments → copy the "Web app" URL). Then re-upload this file to GitHub Pages.
+  </div>
+
+  <div id="header">
+    <h1>Scan your QR to check in</h1>
+    <p id="subtext">Tap below, then hold your phone screen or card steady in front of the camera</p>
+  </div>
+  <button id="startBtn">Tap to Start Camera</button>
+  <div id="reader"></div>
+  <div id="status" class="idle">
+    <div class="name">Ready</div>
+    <div class="msg">Waiting for a code…</div>
+  </div>
+  <div id="diag"></div>
+  <div id="footer">Station: <span id="stationLabel"></span></div>
+
+<script>
+  // =============================================================
+  // CONFIGURE THIS before publishing to GitHub Pages:
+  // =============================================================
+  const API_BASE = "PASTE_YOUR_APPS_SCRIPT_WEB_APP_URL_HERE";
+
+  // Optional per-device overrides via URL, e.g.:
+  //   https://yourname.github.io/church-checkin/?event=EVT-20260809-S1&station=Station-2
+  const params = new URLSearchParams(window.location.search);
+  const PINNED_EVENT = params.get('event') || '';
+  const STATION_ID = params.get('station') || 'Station-1';
+  document.getElementById('stationLabel').textContent = STATION_ID + (PINNED_EVENT ? (' · Event: ' + PINNED_EVENT) : '');
+
+  if (!API_BASE || API_BASE.indexOf('PASTE_YOUR') === 0) {
+    document.getElementById('configWarning').className = 'show';
+    document.getElementById('startBtn').disabled = true;
+  }
+
+  let locked = false;
+  const recentlyScanned = new Map();
+  const RESCAN_COOLDOWN_MS = 8000;
+
+  function setStatus(cls, name, msg) {
+    const el = document.getElementById('status');
+    el.style.display = 'flex';
+    el.className = cls;
+    el.querySelector('.name').textContent = name;
+    el.querySelector('.msg').textContent = msg;
+  }
+
+  function resumeAfter(ms) {
+    setTimeout(() => {
+      locked = false;
+      setStatus('idle', 'Ready', 'Waiting for a code…');
+    }, ms);
+  }
+
+  function apiUrl(action, extraParams) {
+    const u = new URL(API_BASE);
+    u.searchParams.set('action', action);
+    Object.keys(extraParams || {}).forEach(k => u.searchParams.set(k, extraParams[k]));
+    return u.toString();
+  }
+
+  function onScanSuccess(decodedText) {
+    if (locked) return;
+    const now = Date.now();
+    const last = recentlyScanned.get(decodedText);
+    if (last && (now - last) < RESCAN_COOLDOWN_MS) return;
+    recentlyScanned.set(decodedText, now);
+
+    locked = true;
+    setStatus('idle', 'Checking…', decodedText);
+
+    fetch(apiUrl('checkin_token', { token: decodedText, event: PINNED_EVENT, station: STATION_ID }))
+      .then(r => r.json())
+      .then(res => {
+        if (!res.success) setStatus('error', 'Not recognized', res.message);
+        else if (res.alreadyIn) setStatus('warn', res.name, res.message);
+        else setStatus('ok', res.name, res.message);
+        resumeAfter(2500);
+      })
+      .catch(err => {
+        setStatus('error', 'Connection error',
+          'Could not reach the check-in system: ' + err.message +
+          '. Check the device\'s internet connection and that API_BASE is correct.');
+        resumeAfter(3500);
+      });
+  }
+
+  const scanner = new Html5Qrcode('reader');
+
+  function showDiag(text) {
+    const d = document.getElementById('diag');
+    d.textContent = text;
+    d.className = text ? 'show' : '';
+  }
+
+  async function startCamera() {
+    const btn = document.getElementById('startBtn');
+    btn.disabled = true;
+    btn.textContent = 'Starting…';
+    showDiag('');
+
+    if (window.isSecureContext === false) {
+      showDiag('This page is not loading over HTTPS. GitHub Pages serves HTTPS by default — make sure you\'re using the https:// github.io URL, not a local file.');
+      btn.disabled = false; btn.textContent = 'Retry';
+      return;
+    }
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      showDiag('navigator.mediaDevices.getUserMedia is unavailable in this browser.');
+      btn.disabled = false; btn.textContent = 'Retry';
+      return;
+    }
+
+    try {
+      if (navigator.permissions && navigator.permissions.query) {
+        try {
+          const status = await navigator.permissions.query({ name: 'camera' });
+          if (status.state === 'denied') {
+            showDiag('Camera permission is "denied" for this site. Open the site info icon next to the address bar → Permissions → Camera → Allow, then reload.');
+            btn.disabled = false; btn.textContent = 'Retry';
+            return;
+          }
+        } catch (permErr) { /* not supported on this browser — ignore and try anyway */ }
+      }
+
+      await scanner.start(
+        { facingMode: 'environment' },
+        { fps: 10, qrbox: { width: 260, height: 260 } },
+        onScanSuccess,
+        () => {}
+      );
+
+      btn.style.display = 'none';
+      document.getElementById('reader').style.display = 'block';
+      document.getElementById('subtext').textContent = 'Hold your phone screen or card steady in front of the camera';
+      setStatus('idle', 'Ready', 'Waiting for a code…');
+    } catch (err) {
+      const detail = (err && err.name) ? (err.name + ': ' + (err.message || '')) : String(err);
+      showDiag('Camera failed to start — ' + detail +
+        '\n\nCheck: (1) the browser\'s site-permissions icon for a blocked camera, (2) no other app/tab is using the camera, (3) you are on the https://*.github.io URL and not a local file.');
+      btn.disabled = false;
+      btn.textContent = 'Retry';
+    }
+  }
+
+  document.getElementById('startBtn').addEventListener('click', startCamera);
+</script>
+</body>
+</html>
