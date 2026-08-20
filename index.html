@@ -13,12 +13,28 @@
   * { box-sizing: border-box; }
   body {
     margin: 0; font-family: Arial, sans-serif; background: #0b1d3a; color: #fff;
-    min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center;
+    min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: flex-start;
     text-align: center; padding: 16px;
   }
   #header { padding: 8px 16px 16px; }
   #header h1 { margin: 0; font-size: 22px; }
   #header p { margin: 4px 0 0; font-size: 13px; color: #b9c6e0; }
+
+  /* Tabs */
+  #tabs {
+    display: flex; width: min(92vw, 480px); border-radius: 12px; overflow: hidden;
+    border: 1px solid #24509c; margin-bottom: 18px;
+  }
+  .tabBtn {
+    flex: 1; padding: 12px 8px; font-size: 15px; font-weight: bold; border: none;
+    background: #14294f; color: #b9c6e0; cursor: pointer;
+  }
+  .tabBtn.active { background: #2f6fed; color: #fff; }
+
+  #scanPanel, #manualPanel {
+    width: 100%; display: flex; flex-direction: column; align-items: center;
+  }
+
   #reader { width: min(92vw, 480px); border-radius: 16px; overflow: hidden; box-shadow: 0 0 0 4px #14294f; display: none; }
   #status {
     margin-top: 18px; min-height: 90px; width: min(92vw, 480px);
@@ -33,7 +49,7 @@
   #status .msg { font-size: 14px; margin-top: 4px; word-break: break-word; }
   #startBtn {
     font-size: 20px; padding: 18px 36px; border-radius: 14px; border: none;
-    background: #2f6fed; color: #fff; cursor: pointer; margin-top: 24px;
+    background: #2f6fed; color: #fff; cursor: pointer; margin-top: 8px;
   }
   #startBtn:active { background: #24509c; }
   #startBtn:disabled { background: #5b6d99; }
@@ -42,34 +58,72 @@
     text-align: left; white-space: pre-wrap; display: none;
   }
   #diag.show { display: block; }
-  #footer { margin-top: 20px; font-size: 11px; color: #6f82ab; }
   #configWarning {
     background: #8a1f1f; padding: 10px 16px; border-radius: 10px; margin-bottom: 16px;
     font-size: 13px; max-width: min(92vw, 480px); display: none;
   }
   #configWarning.show { display: block; }
+
+  /* Manual search tab */
+  #manualPanel { align-items: stretch; width: min(92vw, 480px); text-align: left; }
+  #manualPanel p.sub { margin: 0 0 14px; color: #b9c6e0; font-size: 13px; }
+  #query {
+    width: 100%; font-size: 16px; padding: 12px 14px; border-radius: 10px;
+    border: 1px solid #24509c; margin-bottom: 10px; background: #14294f; color: #fff;
+  }
+  #query::placeholder { color: #7d8cb3; }
+  #query:focus { outline: 2px solid #2f6fed; }
+  .resultRow {
+    background: #14294f; border: 1px solid #24509c; border-radius: 10px; padding: 12px 14px;
+    margin-bottom: 8px; display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  }
+  .resultRow .info .name { font-weight: bold; font-size: 16px; }
+  .resultRow .info .meta { font-size: 12px; color: #b9c6e0; margin-top: 2px; }
+  .resultRow button {
+    background: #2f6fed; color: #fff; border: none; border-radius: 8px;
+    padding: 10px 14px; font-size: 13px; cursor: pointer; white-space: nowrap;
+  }
+  .resultRow button:disabled { background: #5b6d99; }
+  #manualMsg { margin-top: 10px; font-size: 14px; min-height: 20px; }
+  #manualMsg.ok { color: #6fe28f; font-weight: bold; }
+  #manualMsg.warn { color: #f0c26a; font-weight: bold; }
+  #manualMsg.error { color: #f28b82; font-weight: bold; }
 </style>
 </head>
 <body>
   <div id="configWarning">
     API_BASE is not configured yet. Open this file, find the line
-    <code>const API_BASE = "https://script.google.com/macros/s/AKfycbziV28jQO2ig5FH4XbVS3UGghtTfVrgdumhKN1jVan_aeiQSuPH9CslfHHvnzf-EJur0A/exec";</code>
+    <code>const API_BASE = "PASTE_YOUR_APPS_SCRIPT_WEB_APP_URL_HERE";</code>
     near the top of the &lt;script&gt; block, and paste in your deployed Apps Script Web App URL
     (Deploy → Manage deployments → copy the "Web app" URL). Then re-upload this file to GitHub Pages.
   </div>
 
   <div id="header">
-    <h1>Scan your QR to check in</h1>
+    <h1 id="pageTitle">Scan your QR to check in</h1>
     <p id="subtext">Tap below, then hold your phone screen or card steady in front of the camera</p>
   </div>
-  <button id="startBtn">Tap to Start Camera</button>
-  <div id="reader"></div>
-  <div id="status" class="idle">
-    <div class="name">Ready</div>
-    <div class="msg">Waiting for a code…</div>
+
+  <div id="tabs">
+    <button id="tabScan" class="tabBtn active">Scan QR</button>
+    <button id="tabManual" class="tabBtn">Manual Search</button>
   </div>
-  <div id="diag"></div>
-  <div id="footer">Station: <span id="stationLabel"></span></div>
+
+  <div id="scanPanel">
+    <button id="startBtn">Tap to Start Camera</button>
+    <div id="reader"></div>
+    <div id="status" class="idle">
+      <div class="name">Ready</div>
+      <div class="msg">Waiting for a code…</div>
+    </div>
+    <div id="diag"></div>
+  </div>
+
+  <div id="manualPanel" style="display:none;">
+    <p class="sub">For anyone without their QR code on them right now. Search by name or phone, confirm identity, then check in.</p>
+    <input type="text" id="query" placeholder="Type a name or phone number…">
+    <div id="results"></div>
+    <div id="manualMsg"></div>
+  </div>
 
 <script>
   // =============================================================
@@ -77,19 +131,86 @@
   // =============================================================
   const API_BASE = "https://script.google.com/macros/s/AKfycbziV28jQO2ig5FH4XbVS3UGghtTfVrgdumhKN1jVan_aeiQSuPH9CslfHHvnzf-EJur0A/exec";
 
-  // Optional per-device overrides via URL, e.g.:
-  //   https://ineseyi.github.io/church-checkin/?event=EVT-20260809-S1&station=Station-2
+  // Optional testing override — pins a specific Event ID instead of auto-detecting
+  // the currently open service, e.g.:
+  //   https://yourname.github.io/church-checkin/?event=EVT-20260809-S1
   const params = new URLSearchParams(window.location.search);
   const PINNED_EVENT = params.get('event') || '';
-  const STATION_ID = params.get('station') || 'Station-1';
-  document.getElementById('stationLabel').textContent = STATION_ID + (PINNED_EVENT ? (' · Event: ' + PINNED_EVENT) : '');
 
   if (!API_BASE || API_BASE.indexOf('PASTE_YOUR') === 0) {
     document.getElementById('configWarning').className = 'show';
     document.getElementById('startBtn').disabled = true;
   }
 
+  // ---------------------------------------------------------------------
+  // Shared JSONP transport (used by both the scan tab and manual search tab)
+  // ---------------------------------------------------------------------
+
+  function apiUrl(action, extraParams) {
+    const u = new URL(API_BASE);
+    u.searchParams.set('action', action);
+    Object.keys(extraParams || {}).forEach(k => u.searchParams.set(k, extraParams[k]));
+    return u.toString();
+  }
+
+  // JSONP request: loads the response as a <script> tag rather than fetch()/XHR, so it is
+  // never subject to CORS. This is what makes calling Apps Script from a different domain
+  // (GitHub Pages -> script.google.com) reliable without depending on which headers Apps
+  // Script's redirect chain happens to send.
+  let jsonpSeq = 0;
+  function jsonpRequest(action, params, timeoutMs) {
+    return new Promise((resolve, reject) => {
+      const cbName = 'church_checkin_cb_' + (jsonpSeq++);
+      const script = document.createElement('script');
+
+      const timer = setTimeout(() => { cleanup(); reject(new Error('Request timed out')); }, timeoutMs || 10000);
+      function cleanup() {
+        clearTimeout(timer);
+        delete window[cbName];
+        if (script.parentNode) script.parentNode.removeChild(script);
+      }
+
+      window[cbName] = function (data) { cleanup(); resolve(data); };
+      script.onerror = function () { cleanup(); reject(new Error('Network error reaching the check-in system')); };
+      script.src = apiUrl(action, Object.assign({}, params, { callback: cbName }));
+      document.head.appendChild(script);
+    });
+  }
+
+  // ---------------------------------------------------------------------
+  // Tabs
+  // ---------------------------------------------------------------------
+
+  function showTab(tab) {
+    document.getElementById('tabScan').classList.toggle('active', tab === 'scan');
+    document.getElementById('tabManual').classList.toggle('active', tab === 'manual');
+    document.getElementById('scanPanel').style.display = (tab === 'scan') ? 'flex' : 'none';
+    document.getElementById('manualPanel').style.display = (tab === 'manual') ? 'flex' : 'none';
+
+    if (tab === 'scan') {
+      document.getElementById('pageTitle').textContent = 'Scan your QR to check in';
+      document.getElementById('subtext').textContent = cameraRunning
+        ? 'Hold your phone screen or card steady in front of the camera'
+        : 'Tap below, then hold your phone screen or card steady in front of the camera';
+    } else {
+      document.getElementById('pageTitle').textContent = 'Manual check-in lookup';
+      document.getElementById('subtext').textContent = 'Search by name or phone for anyone without their code on them';
+      // Pause the camera when leaving the scan tab -- releases the device camera and
+      // avoids scanning in the background while the user can't see the viewfinder.
+      stopCameraIfRunning_();
+      document.getElementById('query').focus();
+    }
+  }
+
+  document.getElementById('tabScan').addEventListener('click', () => showTab('scan'));
+  document.getElementById('tabManual').addEventListener('click', () => showTab('manual'));
+
+  // ---------------------------------------------------------------------
+  // Scan tab
+  // ---------------------------------------------------------------------
+
   let locked = false;
+  let cameraRunning = false;
   const recentlyScanned = new Map();
   const RESCAN_COOLDOWN_MS = 8000;
 
@@ -108,13 +229,6 @@
     }, ms);
   }
 
-  function apiUrl(action, extraParams) {
-    const u = new URL(API_BASE);
-    u.searchParams.set('action', action);
-    Object.keys(extraParams || {}).forEach(k => u.searchParams.set(k, extraParams[k]));
-    return u.toString();
-  }
-
   function onScanSuccess(decodedText) {
     if (locked) return;
     const now = Date.now();
@@ -125,8 +239,7 @@
     locked = true;
     setStatus('idle', 'Checking…', decodedText);
 
-    fetch(apiUrl('checkin_token', { token: decodedText, event: PINNED_EVENT, station: STATION_ID }))
-      .then(r => r.json())
+    jsonpRequest('checkin_token', { token: decodedText, event: PINNED_EVENT })
       .then(res => {
         if (!res.success) setStatus('error', 'Not recognized', res.message);
         else if (res.alreadyIn) setStatus('warn', res.name, res.message);
@@ -141,7 +254,23 @@
       });
   }
 
-  const scanner = new Html5Qrcode('reader');
+  // Guard against the html5-qrcode CDN script failing to load (slow connection, a
+  // network/firewall blocking unpkg.com, etc.) -- without this, `new Html5Qrcode(...)`
+  // throws a plain uncaught ReferenceError, which halts the rest of this inline script
+  // and would take Manual Search down with it, even though that tab doesn't need this
+  // library at all. Scanning becomes unavailable in that case, but the rest of the page
+  // (in particular Manual Search) keeps working.
+  let scanner = null;
+  let scannerAvailable = false;
+  try {
+    scanner = new Html5Qrcode('reader');
+    scannerAvailable = true;
+  } catch (err) {
+    scannerAvailable = false;
+  }
+  if (!scannerAvailable) {
+    document.getElementById('startBtn').textContent = 'Scanning unavailable';
+  }
 
   function showDiag(text) {
     const d = document.getElementById('diag');
@@ -154,6 +283,14 @@
     btn.disabled = true;
     btn.textContent = 'Starting…';
     showDiag('');
+
+    if (!scannerAvailable) {
+      showDiag('The QR scanning library failed to load — check the device\'s internet connection ' +
+        '(or that unpkg.com isn\'t blocked on this network). Manual Search still works — use that tab instead.');
+      btn.disabled = true;
+      btn.textContent = 'Scanning unavailable';
+      return;
+    }
 
     if (window.isSecureContext === false) {
       showDiag('This page is not loading over HTTPS. GitHub Pages serves HTTPS by default — make sure you\'re using the https:// github.io URL, not a local file.');
@@ -178,6 +315,15 @@
         } catch (permErr) { /* not supported on this browser — ignore and try anyway */ }
       }
 
+      // Reveal the reader container BEFORE starting the camera, not after. html5-qrcode
+      // measures the container's width/height at start() time to size the <video> element
+      // it creates internally; if the container is still display:none at that instant, it
+      // gets sized 0x0 and nothing ever renders -- even though the camera stream itself is
+      // running fine (which is exactly why permission prompts/grants succeed with no error,
+      // but the screen stays blank). Making it visible first gives it a real size to measure.
+      btn.style.display = 'none';
+      document.getElementById('reader').style.display = 'block';
+
       await scanner.start(
         { facingMode: 'environment' },
         { fps: 10, qrbox: { width: 260, height: 260 } },
@@ -185,20 +331,125 @@
         () => {}
       );
 
-      btn.style.display = 'none';
-      document.getElementById('reader').style.display = 'block';
+      cameraRunning = true;
       document.getElementById('subtext').textContent = 'Hold your phone screen or card steady in front of the camera';
       setStatus('idle', 'Ready', 'Waiting for a code…');
     } catch (err) {
+      // Revert the reveal from above since start() didn't actually succeed.
+      document.getElementById('reader').style.display = 'none';
       const detail = (err && err.name) ? (err.name + ': ' + (err.message || '')) : String(err);
       showDiag('Camera failed to start — ' + detail +
         '\n\nCheck: (1) the browser\'s site-permissions icon for a blocked camera, (2) no other app/tab is using the camera, (3) you are on the https://*.github.io URL and not a local file.');
       btn.disabled = false;
+      btn.style.display = '';
       btn.textContent = 'Retry';
     }
   }
 
+  /** Stops the camera (if running) when switching away from the Scan tab, and resets
+   *  the scan UI back to its initial "Tap to Start Camera" state for next time. */
+  function stopCameraIfRunning_() {
+    if (!cameraRunning) return;
+    scanner.stop()
+      .then(() => scanner.clear())
+      .catch(() => {})
+      .finally(() => {
+        cameraRunning = false;
+        document.getElementById('reader').style.display = 'none';
+        document.getElementById('status').style.display = 'none';
+        showDiag('');
+        const btn = document.getElementById('startBtn');
+        btn.style.display = '';
+        btn.disabled = false;
+        btn.textContent = 'Tap to Start Camera';
+      });
+  }
+
   document.getElementById('startBtn').addEventListener('click', startCamera);
+
+  // ---------------------------------------------------------------------
+  // Manual search tab
+  // ---------------------------------------------------------------------
+
+  let manualDebounce = null;
+
+  document.getElementById('query').addEventListener('input', function (e) {
+    clearTimeout(manualDebounce);
+    const q = e.target.value.trim();
+    showManualMsg('', '');
+    if (q.length < 2) { document.getElementById('results').innerHTML = ''; return; }
+    manualDebounce = setTimeout(() => runManualSearch(q), 250);
+  });
+
+  function runManualSearch(q) {
+    jsonpRequest('search', { q: q })
+      .then(res => {
+        if (!res.success) { showManualMsg('error', res.message || 'Search failed.'); return; }
+        renderManualResults(res.matches || []);
+      })
+      .catch(err => showManualMsg('error', 'Search failed: ' + err.message));
+  }
+
+  function renderManualResults(list) {
+    const container = document.getElementById('results');
+    container.innerHTML = '';
+    if (!list.length) {
+      const row = document.createElement('div');
+      row.className = 'resultRow';
+      row.innerHTML = '<div class="info"><div class="name">No matches</div>' +
+        '<div class="meta">Check spelling, or register them as a new first-timer.</div></div>';
+      container.appendChild(row);
+      return;
+    }
+    list.forEach(p => {
+      const row = document.createElement('div');
+      row.className = 'resultRow';
+      const info = document.createElement('div');
+      info.className = 'info';
+      const name = document.createElement('div');
+      name.className = 'name';
+      name.textContent = p.name || '';
+      const meta = document.createElement('div');
+      meta.className = 'meta';
+      meta.textContent = [p.personId, p.phone, p.status].filter(Boolean).join(' · ');
+      info.appendChild(name);
+      info.appendChild(meta);
+      const btn = document.createElement('button');
+      btn.textContent = 'Check In';
+      btn.addEventListener('click', function () { manualCheckIn(p.personId, p.name, btn); });
+      row.appendChild(info);
+      row.appendChild(btn);
+      container.appendChild(row);
+    });
+  }
+
+  function manualCheckIn(personId, name, btn) {
+    btn.disabled = true;
+    btn.textContent = '...';
+    jsonpRequest('checkin_manual', { personId: personId, event: PINNED_EVENT })
+      .then(res => {
+        if (!res.success) {
+          showManualMsg('error', res.message);
+          btn.disabled = false;
+          btn.textContent = 'Check In';
+          return;
+        }
+        if (res.alreadyIn) showManualMsg('warn', name + ': ' + res.message);
+        else showManualMsg('ok', name + ': ' + res.message);
+        btn.textContent = 'Checked In ✓';
+      })
+      .catch(err => {
+        showManualMsg('error', 'Could not reach the check-in system: ' + err.message);
+        btn.disabled = false;
+        btn.textContent = 'Check In';
+      });
+  }
+
+  function showManualMsg(cls, text) {
+    const el = document.getElementById('manualMsg');
+    el.className = cls;
+    el.textContent = text;
+  }
 </script>
 </body>
 </html>
